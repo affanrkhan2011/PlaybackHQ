@@ -153,37 +153,52 @@ export default function VideoPlayer() {
         
         {/* LEFT PANE - Player Section */}
         <div className="p-6 flex flex-col overflow-y-auto bg-background">
-          <div className="bg-black aspect-video rounded-xl relative overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.4)]">
-            {/* @ts-ignore */}
-            <ReactPlayer
-              ref={playerRef}
-              url={video.url}
-              width="100%"
-              height="100%"
-              playing={playing}
-              controls={true}
-              config={{
-                youtube: {
-                  playerVars: { origin: window.location.origin }
-                }
-              }}
-              onPlay={() => setPlaying(true)}
-              onPause={() => setPlaying(false)}
-              onProgress={(p: any) => {
-                setCurrentTime(p.playedSeconds);
-                if (duration === 0 && playerRef.current) {
-                  const d = playerRef.current.getDuration();
-                  if (d) setDuration(d);
-                }
-              }}
-              onReady={() => {
-                if (playerRef.current) {
-                  const d = playerRef.current.getDuration();
-                  if (d) setDuration(d);
-                }
-              }}
-            />
-          </div>
+            <div className="bg-black aspect-video rounded-xl relative overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.4)] flex items-center justify-center">
+              {/* @ts-ignore */}
+              <ReactPlayer
+                ref={playerRef}
+                url={video.url.startsWith('/') ? `${window.location.origin}${video.url}` : video.url}
+                width="100%"
+                height="100%"
+                playing={playing}
+                controls={true}
+                config={{
+                  file: {
+                    attributes: {
+                      controlsList: 'nodownload'
+                    }
+                  },
+                  youtube: {
+                    playerVars: { origin: window.location.origin, modestbranding: 1 }
+                  }
+                }}
+                onPlay={() => setPlaying(true)}
+                onPause={() => setPlaying(false)}
+                onProgress={(p: any) => {
+                  setCurrentTime(p.playedSeconds);
+                }}
+                onReady={() => {
+                  if (playerRef.current) {
+                    setDuration(playerRef.current.getDuration());
+                  }
+                }}
+                onError={(e) => console.error('ReactPlayer Error:', e)}
+              />
+            </div>
+
+            {/* Troubleshooting / Direct Link for uploads */}
+            {video.type === 'file' && (
+              <div className="mt-2 text-right">
+                <a 
+                  href={video.url} 
+                  target="_blank" 
+                  rel="noreferrer" 
+                  className="text-[11px] text-muted-foreground hover:text-accent flex items-center justify-end"
+                >
+                  Download or open video in new tab if it doesn't play
+                </a>
+              </div>
+            )}
 
           {/* Timeline Area matching design */}
           <div className="mt-6 h-10 relative flex items-center">

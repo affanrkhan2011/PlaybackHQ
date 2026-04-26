@@ -15,6 +15,7 @@ export default function MatchDetails() {
   const [match, setMatch] = useState<any>(null);
   const [videos, setVideos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
 
   // New Video Form State
@@ -44,8 +45,9 @@ export default function MatchDetails() {
 
   const handleAddVideo = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || (!url && !file) || !profile) return;
+    if (!title || (!url && !file) || !profile || submitting) return;
 
+    setSubmitting(true);
     try {
       let finalUrl = url;
       if (file) {
@@ -74,6 +76,9 @@ export default function MatchDetails() {
       fetchMatchAndVideos();
     } catch (error) {
       console.error('Error adding video:', error);
+      alert('Failed to upload video. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -158,7 +163,9 @@ export default function MatchDetails() {
                       <option>Training</option>
                     </select>
                   </div>
-                  <Button type="submit" className="w-full">Add Video</Button>
+                  <Button type="submit" className="w-full" disabled={submitting}>
+                    {submitting ? 'Uploading...' : 'Add Video'}
+                  </Button>
                 </form>
               </DialogContent>
             </Dialog>
