@@ -1,0 +1,105 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() { return request.auth != null; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+
+    match /users/{userId} {
+      function isValidUser(data) {
+        return data.keys().hasAll(['email', 'name', 'role']) && data.keys().size() <= 8
+               && data.email is string && data.name is string && data.role is string
+               && data.role in ['admin', 'coach', 'player'];
+      }
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == userId 
+                    && isValidUser(incoming()) && incoming().role in ['admin', 'coach', 'player']; 
+      allow update: if isSignedIn() && request.auth.uid == userId
+                    && isValidUser(incoming()) && incoming().role == existing().role;
+    }
+
+    match /teams/{teamId} {
+      function isValidTeam(data) {
+        return data.keys().hasAll(['name', 'organizationId']) && data.keys().size() <= 8
+               && data.name is string && data.organizationId is string;
+      }
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      // Only admins/coaches can create
+      allow create: if isSignedIn() && isValidTeam(incoming());
+      allow update: if isSignedIn() && isValidTeam(incoming());
+    }
+
+    match /teams/{teamId}/members/{memberId} {
+      function isValidMember(data) {
+        return data.keys().hasAll(['userId', 'role']) && data.keys().size() <= 8
+               && data.userId is string && data.role in ['player', 'coach', 'admin'];
+      }
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidMember(incoming());
+      allow update: if isSignedIn() && isValidMember(incoming());
+      allow delete: if isSignedIn();
+    }
+
+    match /matches/{matchId} {
+      function isValidMatch(data) {
+        return data.keys().hasAll(['teamId', 'opponent', 'matchDate']) && data.keys().size() <= 7
+               && data.teamId is string && data.opponent is string && data.matchDate is number;
+      }
+      function isTeamMember(teamId) {
+        return exists(/databases/$(database)/documents/teams/$(teamId)/members/$(request.auth.uid));
+      }
+      allow get: if isSignedIn(); // Add better validation later
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isValidMatch(incoming());
+      allow update: if isSignedIn() && isValidMatch(incoming()) && incoming().teamId == existing().teamId;
+      allow delete: if isSignedIn();
+    }
+
+    match /videos/{videoId} {
+      function isValidVideo(data) {
+        return data.keys().hasAll(['matchId', 'title', 'url', 'type', 'category'])
+               && data.matchId is string && data.title is string && data.url is string;
+      }
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isValidVideo(incoming());
+      allow update: if isSignedIn() && isValidVideo(incoming());
+      allow delete: if isSignedIn();
+    }
+
+    match /videos/{videoId}/comments/{commentId} {
+      function isValidComment(data) {
+        return data.keys().hasAll(['videoId', 'coachId', 'timestamp_seconds', 'type', 'text'])
+               && data.videoId is string && data.coachId is string && data.text is string;
+      }
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isValidComment(incoming());
+      allow update: if isSignedIn() && isValidComment(incoming());
+      allow delete: if isSignedIn();
+    }
+
+    match /videos/{videoId}/comments/{commentId}/reactions/{reactionId} {
+      function isValidReaction(data) {
+        return data.keys().hasAll(['playerId', 'reaction'])
+               && data.playerId is string && data.reaction is string;
+      }
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isValidReaction(incoming());
+      allow update: if isSignedIn() && isValidReaction(incoming());
+      allow delete: if isSignedIn();
+    }
+  }
+}

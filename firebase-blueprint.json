@@ -1,0 +1,127 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile in the system",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "coach", "player"] },
+        "organizationId": { "type": "string" }
+      },
+      "required": ["email", "name", "role"]
+    },
+    "Team": {
+      "title": "Team",
+      "description": "A sports team within an organization",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "organizationId": { "type": "string" },
+        "coachId": { "type": "string" },
+        "sport": { "type": "string" },
+        "season": { "type": "string" }
+      },
+      "required": ["name", "organizationId"]
+    },
+    "TeamMember": {
+      "title": "TeamMember",
+      "description": "A player or coach assigned to a team",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "role": { "type": "string", "enum": ["player", "coach"] },
+        "joinedAt": { "type": "number", "description": "Timestamp" }
+      },
+      "required": ["userId", "role"]
+    },
+    "Match": {
+      "title": "Match",
+      "description": "A sporting match played by a team",
+      "type": "object",
+      "properties": {
+        "teamId": { "type": "string" },
+        "opponent": { "type": "string" },
+        "matchDate": { "type": "number", "description": "Timestamp" },
+        "location": { "type": "string" },
+        "score": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["teamId", "opponent", "matchDate"]
+    },
+    "Video": {
+      "title": "Video",
+      "description": "A video associated with a match",
+      "type": "object",
+      "properties": {
+        "matchId": { "type": "string" },
+        "title": { "type": "string" },
+        "url": { "type": "string" },
+        "type": { "type": "string", "enum": ["link", "upload"] },
+        "category": { "type": "string", "enum": ["Full Match", "First Half", "Second Half", "Highlights", "Training"] },
+        "visibility": { "type": "string", "enum": ["team", "public"] },
+        "duration": { "type": "number" },
+        "views": { "type": "number" },
+        "uploadedBy": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["matchId", "title", "url", "type", "category"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "A timestamped comment on a video",
+      "type": "object",
+      "properties": {
+        "videoId": { "type": "string" },
+        "coachId": { "type": "string" },
+        "timestamp_seconds": { "type": "number" },
+        "type": { "type": "string", "enum": ["well_done", "needs_work", "tactical", "key_moment", "general"] },
+        "text": { "type": "string" },
+        "tagged_players": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["videoId", "coachId", "timestamp_seconds", "type", "text"]
+    },
+    "Reaction": {
+      "title": "Reaction",
+      "description": "A player's reaction to a comment",
+      "type": "object",
+      "properties": {
+        "playerId": { "type": "string" },
+        "reaction": { "type": "string", "enum": ["got_it", "question", "working_on_it"] },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["playerId", "reaction"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Stores user profiles."
+    },
+    "teams/{teamId}": {
+      "schema": { "$ref": "#/entities/Team" },
+      "description": "Stores team information."
+    },
+    "teams/{teamId}/members/{memberId}": {
+      "schema": { "$ref": "#/entities/TeamMember" },
+      "description": "Stores members (players) of a team. memberId is usually userId."
+    },
+    "matches/{matchId}": {
+      "schema": { "$ref": "#/entities/Match" },
+      "description": "Stores matches."
+    },
+    "videos/{videoId}": {
+      "schema": { "$ref": "#/entities/Video" },
+      "description": "Stores videos for matches."
+    },
+    "videos/{videoId}/comments/{commentId}": {
+      "schema": { "$ref": "#/entities/Comment" },
+      "description": "Stores comments on a video."
+    },
+    "videos/{videoId}/comments/{commentId}/reactions/{reactionId}": {
+      "schema": { "$ref": "#/entities/Reaction" },
+      "description": "Stores players' reactions to a comment."
+    }
+  }
+}
