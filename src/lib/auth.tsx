@@ -1,21 +1,17 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { User, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut as firebaseSignOut } from 'firebase/auth';
-import { auth, db } from './firebase';
-import { doc, getDoc, setDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 
 export interface UserProfile {
   uid: string;
   email: string;
   name: string;
   role: 'admin' | 'coach' | 'player';
-  organizationId?: string;
 }
 
 interface AuthContextType {
-  user: User | null;
+  user: { uid: string; email: string } | null;
   profile: UserProfile | null;
   loading: boolean;
-  signIn: () => Promise<void>;
+  signIn: (email?: string, name?: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -28,62 +24,44 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<{ uid: string; email: string } | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let unsubscribeProfile: () => void;
-
-    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      if (currentUser) {
-        // Fetch or create profile
-        const profileRef = doc(db, 'users', currentUser.uid);
-        
-        unsubscribeProfile = onSnapshot(profileRef, async (profileSnap) => {
-          if (profileSnap.exists()) {
-            setProfile(profileSnap.data() as UserProfile);
-          } else {
-            const newProfile: UserProfile = {
-              uid: currentUser.uid,
-              email: currentUser.email || '',
-              name: currentUser.displayName || 'Unnamed User',
-              role: 'coach', // Default for this demo
-            };
-            await setDoc(profileRef, { ...newProfile, createdAt: serverTimestamp() });
-          }
-        });
-      } else {
-        setProfile(null);
-        if (unsubscribeProfile) {
-          unsubscribeProfile();
-        }
+    const savedUser = localStorage.getItem('pbhq_user');
+    if (savedUser) {
+      try {
+        const u = JSON.parse(savedUser);
+        setUser(u);
+        setProfile(u);
+      } catch (e) {
+        console.error('Failed to parse saved user', e);
       }
-      setLoading(false);
-    });
-
-    return () => {
-      unsubscribeAuth();
-      if (unsubscribeProfile) unsubscribeProfile();
-    };
+    }
+    setLoading(false);
   }, []);
 
-  const signIn = async () => {
-    const provider = new GoogleAuthProvider();
+  const signIn = async (email = 'demo@example.com', name = 'Demo User') => {
     try {
-      await signInWithPopup(auth, provider);
+      const resp = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, name }),
+      });
+      const data = await resp.json();
+      setUser(data);
+      setProfile(data);
+      localStorage.setItem('pbhq_user', JSON.stringify(data));
     } catch (error) {
-      console.error('Error signing in with Google', error);
+      console.error('Error signing in', error);
     }
   };
 
   const signOut = async () => {
-    try {
-      await firebaseSignOut(auth);
-    } catch (error) {
-      console.error('Error signing out', error);
-    }
+    setUser(null);
+    setProfile(null);
+    localStorage.removeItem('pbhq_user');
   };
 
   return (

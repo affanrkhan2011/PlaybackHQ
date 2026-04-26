@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router';
 import { useAuth } from '../lib/auth';
-import { db } from '../lib/firebase';
-import { collection, query, where, getDocs, addDoc, doc, getDoc, serverTimestamp, updateDoc, deleteDoc } from 'firebase/firestore';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -41,18 +39,14 @@ export default function TeamDetails() {
 
   const fetchTeamData = async () => {
     try {
-      const teamDoc = await getDoc(doc(db, 'teams', teamId!));
-      if (teamDoc.exists()) setTeam({ id: teamDoc.id, ...teamDoc.data() });
+      const teamResp = await fetch(`/api/teams/${teamId}`);
+      if (teamResp.ok) setTeam(await teamResp.json());
 
-      const q = query(collection(db, 'matches'), where('teamId', '==', teamId));
-      const snapshot = await getDocs(q);
-      const fetchedMatches = snapshot.docs.map(d => ({ id: d.id, ...d.data() }) as any);
-      fetchedMatches.sort((a, b) => b.matchDate - a.matchDate);
-      setMatches(fetchedMatches);
+      const matchesResp = await fetch(`/api/teams/${teamId}/matches`);
+      if (matchesResp.ok) setMatches(await matchesResp.json());
 
-      const mQ = collection(db, 'teams', teamId!, 'members');
-      const mSnap = await getDocs(mQ);
-      setMembers(mSnap.docs.map(d => ({ id: d.id, ...d.data() }) as any));
+      const membersResp = await fetch(`/api/teams/${teamId}/members`);
+      if (membersResp.ok) setMembers(await membersResp.json());
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
@@ -64,8 +58,12 @@ export default function TeamDetails() {
     e.preventDefault();
     if (!opponent || !matchDate) return;
     try {
-      await addDoc(collection(db, 'matches'), {
-        teamId, opponent, location, matchDate: new Date(matchDate).getTime(), createdAt: serverTimestamp()
+      await fetch('/api/matches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          teamId, opponent, location, date: matchDate, type: 'League'
+        })
       });
       setIsMatchOpen(false);
       setOpponent(''); setMatchDate(''); setLocation('');
@@ -78,7 +76,11 @@ export default function TeamDetails() {
   const handleEditTeamName = async () => {
     if (!newTeamName.trim()) return;
     try {
-      await updateDoc(doc(db, 'teams', teamId!), { name: newTeamName });
+      await fetch(`/api/teams/${teamId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newTeamName })
+      });
       setIsEditNameOpen(false);
       fetchTeamData();
     } catch (error) {
@@ -90,12 +92,14 @@ export default function TeamDetails() {
     e.preventDefault();
     if (!newMemberName.trim()) return;
     try {
-      await addDoc(collection(db, `teams/${teamId}/members`), {
-        userId: `guest_${Date.now()}`,
-        name: newMemberName,
-        role: newMemberRole,
-        isGuest: true,
-        joinedAt: serverTimestamp()
+      await fetch(`/api/teams/${teamId}/members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: `${newMemberName.toLowerCase().replace(/\s/g, '')}@example.com`,
+          name: newMemberName,
+          role: newMemberRole
+        })
       });
       setIsAddMemberOpen(false);
       setNewMemberName('');
@@ -108,7 +112,7 @@ export default function TeamDetails() {
   const handleKickMember = async (memberId: string) => {
     if (!confirm('Are you sure you want to remove this member?')) return;
     try {
-      await deleteDoc(doc(db, `teams/${teamId}/members`, memberId));
+      await fetch(`/api/teams/${teamId}/members/${memberId}`, { method: 'DELETE' });
       fetchTeamData();
     } catch (error) {
       console.error(error);
@@ -117,7 +121,17 @@ export default function TeamDetails() {
 
   const handleEditMemberRole = async (memberId: string, newRole: string) => {
     try {
-      await updateDoc(doc(db, `teams/${teamId}/members`, memberId), { role: newRole });
+      // For simplicity, we reuse the add member to update role (UPSERT)
+      const member = members.find(m => m.uid === memberId);
+      await fetch(`/api/teams/${teamId}/members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: member.email,
+          name: member.name,
+          role: newRole
+        })
+      });
       fetchTeamData();
     } catch (error) {
       console.error(error);
@@ -219,7 +233,7 @@ export default function TeamDetails() {
                         <div>
                           <CardTitle className="text-xl text-foreground">vs {match.opponent}</CardTitle>
                           <CardDescription className="flex items-center mt-2 space-x-4 text-muted-foreground">
-                            <span className="flex items-center"><Calendar className="mr-1 h-3 w-3"/> {format(new Date(match.matchDate), 'MMM d, yyyy')}</span>
+                            <span className="flex items-center"><Calendar className="mr-1 h-3 w-3"/> {(match.matchDate && !isNaN(new Date(match.matchDate).getTime())) ? format(new Date(match.matchDate), 'MMM d, yyyy') : 'No date'}</span>
                             {match.location && <span className="flex items-center"><MapPin className="mr-1 h-3 w-3"/> {match.location}</span>}
                           </CardDescription>
                         </div>

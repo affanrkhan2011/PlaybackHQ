@@ -2,16 +2,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { useAuth } from '../lib/auth';
-import { db } from '../lib/firebase';
-import { doc, getDoc, collection, addDoc, query, where, onSnapshot, serverTimestamp, orderBy } from 'firebase/firestore';
 import ReactPlayer from 'react-player';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ArrowLeft, MessageSquarePlus, Play, Pause, Reply, Edit2, Trash2, MoreVertical } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { updateDoc, deleteDoc } from 'firebase/firestore';
 import { format } from 'date-fns';
 
 const COMMENT_TYPES = {
@@ -56,27 +53,20 @@ export default function VideoPlayer() {
   useEffect(() => {
     if (!videoId) return;
 
-    // Fetch Video details
-    const fetchVideo = async () => {
-      const vDoc = await getDoc(doc(db, 'videos', videoId));
-      if (vDoc.exists()) {
-        setVideo({ id: vDoc.id, ...vDoc.data() });
+    const fetchData = async () => {
+      try {
+        const vResp = await fetch(`/api/videos/${videoId}`);
+        if (vResp.ok) setVideo(await vResp.json());
+
+        const cResp = await fetch(`/api/videos/${videoId}/comments`);
+        if (cResp.ok) setComments(await cResp.json());
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
-    fetchVideo();
-
-    // Subscribe to comments
-    const q = query(
-      collection(db, `videos/${videoId}/comments`),
-    );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedComments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as any);
-      fetchedComments.sort((a, b) => a.timestamp_seconds - b.timestamp_seconds);
-      setComments(fetchedComments);
-    });
-
-    return () => unsubscribe();
+    fetchData();
   }, [videoId]);
 
   const handleStartComment = () => {
@@ -88,32 +78,38 @@ export default function VideoPlayer() {
   const handleSubmitComment = async () => {
     if (!commentText.trim() || !profile) return;
     try {
-      await addDoc(collection(db, `videos/${videoId}/comments`), {
-        videoId,
-        coachId: profile.uid,
-        timestamp_seconds: pendingTimestamp,
-        type: commentType,
-        text: commentText,
-        tagged_players: [],
-        createdAt: serverTimestamp()
+      const resp = await fetch(`/api/videos/${videoId}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: profile.uid,
+          text: commentText,
+          type: commentType,
+          timestamp: pendingTimestamp,
+        }),
       });
-      setIsAddingComment(false);
-      setCommentText('');
-      setCommentType('general');
+
+      if (resp.ok) {
+        setIsAddingComment(false);
+        setCommentText('');
+        setCommentType('general');
+        // Refresh comments
+        const cResp = await fetch(`/api/videos/${videoId}/comments`);
+        if (cResp.ok) setComments(await cResp.json());
+      }
     } catch (e) {
       console.error(e);
     }
   };
 
-  const handleSeek = (time: number) => {
-    playerRef.current?.seekTo(time, 'seconds');
-    setPlaying(true);
-  };
-
   const handleEditVideoTitle = async () => {
     if (!editTitle.trim()) return;
     try {
-      await updateDoc(doc(db, 'videos', videoId!), { title: editTitle });
+      await fetch(`/api/videos/${videoId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: editTitle }),
+      });
       setVideo(prev => ({ ...prev, title: editTitle }));
       setIsEditingVideo(false);
     } catch (error) {
@@ -124,11 +120,16 @@ export default function VideoPlayer() {
   const handleDeleteVideo = async () => {
     if (!confirm('Are you sure you want to delete this video?')) return;
     try {
-      await deleteDoc(doc(db, 'videos', videoId!));
+      await fetch(`/api/videos/${videoId}`, { method: 'DELETE' });
       navigate(-1);
     } catch (error) {
       console.error('Error deleting video:', error);
     }
+  };
+
+  const handleSeek = (time: number) => {
+    playerRef.current?.seekTo(time, 'seconds');
+    setPlaying(true);
   };
 
   if (loading) return <div className="p-8 text-center text-zinc-500">Loading player...</div>;

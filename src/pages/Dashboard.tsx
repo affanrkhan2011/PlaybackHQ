@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router';
 import { useAuth } from '../lib/auth';
-import { db } from '../lib/firebase';
-import { collection, query, getDocs, addDoc, serverTimestamp, doc, setDoc } from 'firebase/firestore';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -22,12 +20,15 @@ export default function Dashboard() {
   }, [user]);
 
   const fetchTeams = async () => {
-    // In a real app with proper relational queries, we'd query teams where user is a member
-    // Here we query all for simplicity of the MVP
-    const q = query(collection(db, 'teams'));
-    const snapshot = await getDocs(q);
-    setTeams(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    setLoading(false);
+    try {
+      const resp = await fetch('/api/teams');
+      const data = await resp.json();
+      setTeams(data);
+    } catch (error) {
+      console.error('Error fetching teams:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCreateTeam = async (e: React.FormEvent) => {
@@ -35,23 +36,20 @@ export default function Dashboard() {
     if (!newTeamName.trim() || !profile) return;
 
     try {
-      const docRef = await addDoc(collection(db, 'teams'), {
-        name: newTeamName,
-        organizationId: 'demo-org', // Hardcoded for MVP
-        coachId: user?.uid,
-        createdAt: serverTimestamp()
+      const resp = await fetch('/api/teams', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newTeamName,
+          creatorId: user?.uid,
+        }),
       });
       
-      // Add user as a member
-      await setDoc(doc(db, `teams/${docRef.id}/members`, user!.uid), {
-        userId: user!.uid,
-        role: profile.role,
-        joinedAt: serverTimestamp()
-      });
-
-      setNewTeamName('');
-      setIsOpen(false);
-      fetchTeams();
+      if (resp.ok) {
+        setNewTeamName('');
+        setIsOpen(false);
+        fetchTeams();
+      }
     } catch (error) {
       console.error('Error creating team:', error);
     }

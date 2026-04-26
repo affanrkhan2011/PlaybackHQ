@@ -5,21 +5,25 @@ import { LogOut, Settings } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '../src/lib/firebase';
 
 export default function Header() {
-  const { profile, signOut } = useAuth();
+  const { profile, signOut, signIn } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [newName, setNewName] = useState(profile?.name || '');
 
   const handleSaveSettings = async () => {
     if (!profile) return;
     try {
-      await updateDoc(doc(db, 'users', profile.uid), {
-        name: newName
+      const resp = await fetch(`/api/users/${profile.uid}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName })
       });
-      setSettingsOpen(false);
+      if (resp.ok) {
+        // Simple way to refresh: just re-login current user email
+        await signIn(profile.email, newName);
+        setSettingsOpen(false);
+      }
     } catch (error) {
       console.error(error);
     }

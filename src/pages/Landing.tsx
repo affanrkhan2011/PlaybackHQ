@@ -21,8 +21,8 @@ export default function Landing() {
         <p className="mx-auto max-w-lg text-lg text-muted-foreground mb-8">
           The dedicated platform for youth sports teams to organize, share, and collaboratively review match footage.
         </p>
-        <Button onClick={signIn} size="lg" className="bg-accent hover:opacity-90 text-white px-8 py-6 text-lg rounded-full">
-          Sign In with Google
+        <Button onClick={() => signIn()} size="lg" className="bg-accent hover:opacity-90 text-white px-8 py-6 text-lg rounded-full">
+          Get Started
         </Button>
       </main>
       <footer className="border-t border-border py-6 text-center text-sm text-muted-foreground">

@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { useAuth } from '../lib/auth';
-import { db } from '../lib/firebase';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 
 export default function JoinTeam() {
@@ -14,20 +12,25 @@ export default function JoinTeam() {
 
   useEffect(() => {
     if (!teamId) return;
-    getDoc(doc(db, 'teams', teamId)).then(snap => {
-      if (snap.exists()) setTeam({ id: snap.id, ...snap.data() });
-      setLoading(false);
-    });
+    fetch(`/api/teams/${teamId}`)
+      .then(res => res.json())
+      .then(data => {
+        setTeam(data);
+        setLoading(false);
+      });
   }, [teamId]);
 
   const handleJoin = async () => {
     if (!user || !profile || !teamId) return;
     try {
-      await setDoc(doc(db, `teams/${teamId}/members`, user.uid), {
-        userId: user.uid,
-        name: profile.name,
-        role: 'player', // Default role for joining via link
-        joinedAt: serverTimestamp()
+      await fetch(`/api/teams/${teamId}/members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: profile.email,
+          name: profile.name,
+          role: 'player'
+        })
       });
       navigate(`/teams/${teamId}`);
     } catch (error) {

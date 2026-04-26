@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router';
 import { useAuth } from '../lib/auth';
-import { db } from '../lib/firebase';
-import { collection, query, where, getDocs, addDoc, doc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -22,6 +20,7 @@ export default function MatchDetails() {
   // New Video Form State
   const [title, setTitle] = useState('');
   const [url, setUrl] = useState('');
+  const [file, setFile] = useState<File | null>(null);
   const [category, setCategory] = useState('Full Match');
 
   useEffect(() => {
@@ -31,13 +30,11 @@ export default function MatchDetails() {
 
   const fetchMatchAndVideos = async () => {
     try {
-      const matchDoc = await getDoc(doc(db, 'matches', matchId!));
-      if (matchDoc.exists()) setMatch({ id: matchDoc.id, ...matchDoc.data() });
+      const matchResp = await fetch(`/api/matches/${matchId}`);
+      if (matchResp.ok) setMatch(await matchResp.json());
 
-      const q = query(collection(db, 'videos'), where('matchId', '==', matchId));
-      const snapshot = await getDocs(q);
-      const fetchedVideos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setVideos(fetchedVideos);
+      const videosResp = await fetch(`/api/matches/${matchId}/videos`);
+      if (videosResp.ok) setVideos(await videosResp.json());
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
@@ -47,22 +44,32 @@ export default function MatchDetails() {
 
   const handleAddVideo = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !url || !profile) return;
+    if (!title || (!url && !file) || !profile) return;
 
     try {
-      await addDoc(collection(db, 'videos'), {
-        matchId,
-        title,
-        url,
-        type: 'link', // Currently only supporting links
-        category,
-        uploadedBy: profile.uid,
-        views: 0,
-        createdAt: serverTimestamp()
+      let finalUrl = url;
+      if (file) {
+        const formData = new FormData();
+        formData.append('video', file);
+        const uploadResp = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+        const uploadData = await uploadResp.json();
+        finalUrl = uploadData.url;
+      }
+
+      await fetch('/api/videos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          matchId, title, url: finalUrl, type: file ? 'file' : 'link', category, duration: '0:00'
+        })
       });
       setIsOpen(false);
       setTitle('');
       setUrl('');
+      setFile(null);
       setCategory('Full Match');
       fetchMatchAndVideos();
     } catch (error) {
@@ -82,7 +89,7 @@ export default function MatchDetails() {
 
         <header className="mb-8 block">
           <h1 className="text-4xl font-bold tracking-tight mb-2">vs {match.opponent}</h1>
-          <p className="text-muted-foreground">Played on {format(new Date(match.matchDate), 'MMMM do, yyyy')}</p>
+          <p className="text-muted-foreground">Played on {match.matchDate ? format(new Date(match.matchDate), 'MMMM do, yyyy') : 'No date'}</p>
         </header>
 
         <div className="flex items-center justify-between mb-6">
@@ -90,11 +97,11 @@ export default function MatchDetails() {
           {profile?.role !== 'player' && (
             <Dialog open={isOpen} onOpenChange={setIsOpen}>
               <DialogTrigger className={buttonVariants()}>
-                <Plus className="mr-2 h-4 w-4" /> Add Video Link
+                <Plus className="mr-2 h-4 w-4" /> Add Video
               </DialogTrigger>
               <DialogContent className="bg-card text-foreground border-border">
                 <DialogHeader>
-                  <DialogTitle>Add a Video Link</DialogTitle>
+                  <DialogTitle>Add a Video</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleAddVideo} className="space-y-4 pt-4">
                   <div>
@@ -102,8 +109,40 @@ export default function MatchDetails() {
                     <Input className="bg-background border-border" placeholder="e.g. First Half" value={title} onChange={(e) => setTitle(e.target.value)} required />
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Video URL (YouTube, Vimeo, MP4 link)</label>
-                    <Input className="bg-background border-border" placeholder="https://youtube.com/..." value={url} onChange={(e) => setUrl(e.target.value)} required />
+                    <label className="text-sm font-medium mb-1 block">Video Option</label>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">Option A: Direct Upload</label>
+                        <Input 
+                          type="file" 
+                          accept="video/*" 
+                          className="bg-background border-border" 
+                          onChange={(e) => {
+                            if (e.target.files) {
+                              setFile(e.target.files[0]);
+                              setUrl('');
+                            }
+                          }} 
+                        />
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <div className="h-px flex-1 bg-border"></div>
+                        <span className="text-[10px] uppercase text-muted-foreground">OR</span>
+                        <div className="h-px flex-1 bg-border"></div>
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">Option B: Video URL (YouTube, MP4 link)</label>
+                        <Input 
+                          className="bg-background border-border" 
+                          placeholder="https://youtube.com/..." 
+                          value={url} 
+                          onChange={(e) => {
+                            setUrl(e.target.value);
+                            setFile(null);
+                          }} 
+                        />
+                      </div>
+                    </div>
                   </div>
                   <div>
                     <label className="text-sm font-medium mb-1 block">Category</label>
@@ -146,7 +185,7 @@ export default function MatchDetails() {
                   <CardHeader className="p-4 flex-1">
                     <CardTitle className="text-lg line-clamp-1 text-foreground">{video.title}</CardTitle>
                     <CardContent className="p-0 pt-2 text-xs text-muted-foreground">
-                      Added {format(new Date(video.createdAt?.toDate() || Date.now()), 'MMM d, yyyy')}
+                      Added {video.createdAt ? format(new Date(video.createdAt), 'MMM d, yyyy') : 'Recently'}
                     </CardContent>
                   </CardHeader>
                 </Card>
